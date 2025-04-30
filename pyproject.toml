@@ -1,0 +1,19 @@
+[project]
+name = "excel-ai-assistant"
+version = "1.0.0"
+description = "A desktop application that helps you apply AI transformations to Excel and CSV data using OpenAI's API."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "matplot>=0.1.9",
+    "matplotlib>=3.10.1",
+    "numpy>=2.2.5",
+    "openai>=1.76.2",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "seaborn>=0.13.2",
+    "tkinter-tooltip>=3.1.2",
+]
