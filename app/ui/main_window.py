@@ -72,45 +72,6 @@ class ExcelAIAssistantApp:
         # Log startup
         self.logger.info(f"Application started with API type: {api_type}")
 
-    # def __init__(self, root: tk.Tk, config: AppConfig, theme_manager: ThemeManager):
-    #     """Initialize the main application window"""
-    #     self.root = root
-    #     self.config = config
-    #     self.theme_manager = theme_manager
-    #     api_type = self.config.get('api_type', 'openai')
-    #
-    #     # Setup logger
-    #     self.logger = setup_logger(
-    #         "ExcelAIAssistant",
-    #         level=self.config.get('log_level', 'INFO'),
-    #         log_to_file=self.config.get('save_logs', True)
-    #     )
-    #
-    #     # Initialize services
-    #     self.api_manager = APIManager(
-    #         api_key=self.config.get('api_key', ''),
-    #         model=self._get_current_model_name(),
-    #         api_type=api_type,
-    #         ollama_url=self.config.get('ollama_url', 'http://localhost:11434')
-    #     )
-    #
-    #     self.data_manager = DataManager()
-    #
-    #     # Create menu and UI components
-    #     self._create_menu()
-    #     self._create_ui()
-    #
-    #     # Set up event handlers
-    #     self._setup_event_handlers()
-    #
-    #     # Check for API key on startup
-    #     self._check_api_key()
-    #
-    #     # Setup asyncio event loop
-    #     self._setup_asyncio_loop()
-    #
-    #     # Log startup
-    #     self.logger.info("Application started")
 
     def _create_menu(self):
         """Create the main menu bar"""
@@ -331,104 +292,6 @@ class ExcelAIAssistantApp:
         # Update Ollama URL when changed
         self.ollama_url_var.trace_add("write", self._ollama_url_changed)
 
-    # def _create_toolbar(self, parent: ttk.Frame):
-    #     """Create the toolbar with API type selector"""
-    #     toolbar_frame = ttk.Frame(parent)
-    #     toolbar_frame.pack(fill=tk.X, padx=5, pady=5)
-    #
-    #     # File operations
-    #     ttk.Button(toolbar_frame, text="Open", command=self.open_file).pack(side=tk.LEFT, padx=2)
-    #     ttk.Button(toolbar_frame, text="Save", command=self.save_file).pack(side=tk.LEFT, padx=2)
-    #
-    #     ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-    #
-    #     # API Type selection
-    #     ttk.Label(toolbar_frame, text="API:").pack(side=tk.LEFT, padx=5)
-    #     self.api_type_var = tk.StringVar(value=self.config.get('api_type', 'openai'))
-    #     api_type_combobox = ttk.Combobox(toolbar_frame, textvariable=self.api_type_var, width=8, state="readonly")
-    #     api_type_combobox['values'] = ["OpenAI", "Ollama"]
-    #     api_type_combobox.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Set current API type
-    #     if self.api_type_var.get() == 'openai':
-    #         api_type_combobox.set("OpenAI")
-    #     else:
-    #         api_type_combobox.set("Ollama")
-    #
-    #     # OpenAI specific settings (visible when OpenAI is selected)
-    #     self.openai_frame = ttk.Frame(toolbar_frame)
-    #     self.openai_frame.pack(side=tk.LEFT, padx=2)
-    #
-    #     ttk.Label(self.openai_frame, text="API Key:").pack(side=tk.LEFT, padx=5)
-    #     self.api_key_entry = ttk.Entry(self.openai_frame, width=25, show="*")
-    #     self.api_key_entry.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Set API key from config
-    #     api_key = self.config.get('api_key', '')
-    #     if api_key:
-    #         self.api_key_entry.insert(0, api_key)
-    #
-    #     # Ollama specific settings (initially hidden)
-    #     self.ollama_frame = ttk.Frame(toolbar_frame)
-    #
-    #     ttk.Label(self.ollama_frame, text="Ollama URL:").pack(side=tk.LEFT, padx=5)
-    #     self.ollama_url_var = tk.StringVar(value=self.config.get('ollama_url', 'http://localhost:11434'))
-    #     ttk.Entry(self.ollama_frame, textvariable=self.ollama_url_var, width=20).pack(side=tk.LEFT, padx=2)
-    #
-    #     ttk.Button(self.ollama_frame, text="Settings", command=self._open_ollama_settings).pack(side=tk.LEFT, padx=2)
-    #
-    #     # Show the appropriate frame based on selected API type
-    #     if self.api_type_var.get() == 'openai':
-    #         self.openai_frame.pack(side=tk.LEFT, padx=2)
-    #         self.ollama_frame.pack_forget()
-    #     else:
-    #         self.openai_frame.pack_forget()
-    #         self.ollama_frame.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Test connection button
-    #     ttk.Button(toolbar_frame, text="Test API", command=self._test_api_connection).pack(side=tk.LEFT, padx=2)
-    #
-    #     ttk.Separator(toolbar_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5, fill=tk.Y)
-    #
-    #     # Model selection - now handles both API types
-    #     ttk.Label(toolbar_frame, text="Model:").pack(side=tk.LEFT, padx=5)
-    #
-    #     # Use a variable that will show the appropriate model based on API type
-    #     self.model_var = tk.StringVar(value=self._get_current_model_name())
-    #     self.model_combobox = ttk.Combobox(toolbar_frame, textvariable=self.model_var, width=15, state="readonly")
-    #     self._update_model_list()  # Populate the model list
-    #     self.model_combobox.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Add spacer to push theme selector to the right
-    #     ttk.Frame(toolbar_frame).pack(side=tk.LEFT, fill=tk.X, expand=True)
-    #
-    #     # Theme selector
-    #     ttk.Label(toolbar_frame, text="Theme:").pack(side=tk.LEFT, padx=5)
-    #     self.theme_combobox = ttk.Combobox(toolbar_frame, textvariable=self.theme_var, width=10, state="readonly")
-    #     self.theme_combobox['values'] = ["Light", "Dark", "System"]
-    #     self.theme_combobox.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Set combobox values
-    #     current_theme = self.theme_manager.get_theme()
-    #     if current_theme == "light":
-    #         self.theme_combobox.set("Light")
-    #     elif current_theme == "dark":
-    #         self.theme_combobox.set("Dark")
-    #     else:
-    #         self.theme_combobox.set("System")
-    #
-    #     # Bind combobox events
-    #     self.theme_combobox.bind("<<ComboboxSelected>>", self._on_theme_changed)
-    #     self.model_combobox.bind("<<ComboboxSelected>>", self._on_model_changed)
-    #     api_type_combobox.bind("<<ComboboxSelected>>", self._on_api_type_changed)
-    #
-    #     # Update API key when changed
-    #     self.api_key_entry.bind("<FocusOut>", self._api_key_changed)
-    #
-    #     # Update Ollama URL when changed
-    #     self.ollama_url_var.trace_add("write", self._ollama_url_changed)
-
-    # 2. Add new methods to handle API type changes and model selection
 
     def _get_current_model_name(self):
         """Get the appropriate model name based on current API type"""
@@ -438,40 +301,6 @@ class ExcelAIAssistantApp:
         else:  # ollama
             return self.config.get('ollama_model', 'llama3')
 
-    # def _get_current_model_name(self):
-    #     """Get the appropriate model name based on current API type"""
-    #
-    #     api_type = self.config.get('api_type', 'openai')
-    #     if api_type == 'openai':
-    #         return self.config.get('model', 'gpt-3.5-turbo')
-    #     else:  # ollama
-    #         return self.config.get('ollama_model', 'llama3')
-    # def _update_model_list(self):
-    #     """Update the model combobox based on selected API type"""
-    #     api_type = self.api_type_var.get()
-    #
-    #     if api_type == 'openai':
-    #         # Fixed list of OpenAI models
-    #         models = [
-    #             "gpt-3.5-turbo",
-    #             "gpt-4",
-    #             "gpt-4-turbo",
-    #             "gpt-4o",
-    #             "gpt-4o-mini",
-    #             "gpt-4-1106-preview",
-    #             "gpt-4-0125-preview",
-    #             "gpt-4-vision-preview",
-    #             "gpt-4.1-preview",
-    #             "gpt-3.5-turbo-16k"
-    #         ]
-    #         self.model_combobox['values'] = models
-    #         self.model_combobox.set(self.config.get('model', 'gpt-3.5-turbo'))
-    #     else:  # ollama
-    #         # Get available Ollama models (this could be asynchronous)
-    #         self.model_combobox.set("Loading...")
-    #
-    #         # Start a thread to load models
-    #         threading.Thread(target=self._load_ollama_models, daemon=True).start()
 
     def _update_model_list(self):
         """Update the model combobox based on selected API type"""
@@ -526,40 +355,6 @@ class ExcelAIAssistantApp:
             self.log(f"Error loading Ollama models: {str(e)}", "ERROR")
             self.root.after(0, lambda: self._update_ollama_models([]))
 
-    # def _load_ollama_models(self):
-    #     """Load available Ollama models in a background thread"""
-    #     try:
-    #         # Ensure API manager is using Ollama
-    #         self.api_manager.set_api_type('ollama')
-    #         self.api_manager.set_ollama_url(self.ollama_url_var.get())
-    #
-    #         # Get models
-    #         models = self.api_manager.get_available_models()
-    #         model_names = [model["name"] for model in models]
-    #
-    #         # Update UI in main thread
-    #         self.root.after(0, lambda: self._update_ollama_models(model_names))
-    #     except Exception as e:
-    #         self.log(f"Error loading Ollama models: {str(e)}", "ERROR")
-    #         self.root.after(0, lambda: self._update_ollama_models([]))
-
-    # def _update_ollama_models(self, model_names):
-    #     """Update the UI with loaded Ollama models"""
-    #     if model_names:
-    #         self.model_combobox['values'] = model_names
-    #
-    #         # Set current model or first available
-    #         current_model = self.config.get('ollama_model', '')
-    #         if current_model in model_names:
-    #             self.model_combobox.set(current_model)
-    #         else:
-    #             self.model_combobox.set(model_names[0])
-    #             self.config.set('ollama_model', model_names[0])
-    #     else:
-    #         # No models found
-    #         self.model_combobox['values'] = ["No models found"]
-    #         self.model_combobox.set("No models found")
-    #         self.log("No Ollama models found. Make sure Ollama is running and models are installed.", "WARNING")
 
     def _update_ollama_models(self, model_names):
         """Update the UI with loaded Ollama models"""
@@ -606,32 +401,6 @@ class ExcelAIAssistantApp:
         # Log change
         self.log(f"API type changed to: {api_type}")
 
-    # def _on_api_type_changed(self, event=None):
-    #     """Handle API type combobox selection"""
-    #     api_type_text = self.api_type_var.get()
-    #
-    #     # Convert display text to config value
-    #     if api_type_text.lower() == "openai":
-    #         api_type = "openai"
-    #     else:
-    #         api_type = "ollama"
-    #
-    #     # Update config
-    #     self.config.set('api_type', api_type)
-    #
-    #     # Update API manager
-    #     self.api_manager.set_api_type(api_type)
-    #
-    #     # Show/hide appropriate frames
-    #     if api_type == 'openai':
-    #         self.openai_frame.pack(side=tk.LEFT, padx=2)
-    #         self.ollama_frame.pack_forget()
-    #     else:
-    #         self.openai_frame.pack_forget()
-    #         self.ollama_frame.pack(side=tk.LEFT, padx=2)
-    #
-    #     # Update model list
-    #     self._update_model_list()
 
     def _on_model_changed(self, event=None):
         """Handle model combobox selection"""
@@ -653,26 +422,6 @@ class ExcelAIAssistantApp:
 
         # Log change
         self.log(f"Model changed to: {model}")
-
-    # def _on_model_changed(self, event=None):
-    #     """Handle model combobox selection"""
-    #     model = self.model_var.get()
-    #
-    #     # Skip if in loading state
-    #     if model == "Loading...":
-    #         return
-    #
-    #     # Update the right config value based on API type
-    #     api_type = self.config.get('api_type', 'openai')
-    #     if api_type == 'openai':
-    #         self.config.set('model', model)
-    #     else:
-    #         self.config.set('ollama_model', model)
-    #
-    #     # Update API manager
-    #     self.api_manager.set_model(model)
-    #
-    #     self.log(f"Model changed to: {model}")
 
     def _create_control_panel(self, parent: ttk.Frame):
         """Create the control panel (left side)"""
@@ -743,6 +492,48 @@ class ExcelAIAssistantApp:
         ttk.Button(templates_frame, text="Save", command=self._save_prompt_template).pack(side=tk.LEFT, padx=5)
         ttk.Button(templates_frame, text="Delete", command=self._delete_prompt_template).pack(side=tk.LEFT, padx=5)
 
+        # Add Processing Parameters
+        batch_frame = ttk.LabelFrame(range_frame, text="Processing Parameters")
+        batch_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Use a grid for better cross-platform layout
+        batch_frame.columnconfigure(0, weight=1)
+        batch_frame.columnconfigure(1, weight=1)
+
+        # Batch size
+        ttk.Label(batch_frame, text="Batch Size:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.batch_size_var = tk.StringVar(value="10")
+        # Use Entry instead of Spinbox for better cross-platform compatibility
+        batch_size_entry = ttk.Entry(batch_frame, textvariable=self.batch_size_var, width=10)
+        batch_size_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+
+        # Temperature
+        ttk.Label(batch_frame, text="Temperature:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        temp_frame = ttk.Frame(batch_frame)
+        temp_frame.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+
+        self.temperature_var = tk.DoubleVar(value=0.3)
+        temp_scale = ttk.Scale(temp_frame, from_=0.0, to=1.0, length=100, orient=tk.HORIZONTAL,
+                               variable=self.temperature_var, command=self._update_temperature_label)
+        temp_scale.pack(side=tk.LEFT)
+
+        self.temperature_label = ttk.Label(temp_frame, text="0.3", width=3)
+        self.temperature_label.pack(side=tk.LEFT, padx=5)
+
+        # Max tokens
+        ttk.Label(batch_frame, text="Max Tokens:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        self.max_tokens_var = tk.StringVar(value="150")
+        # Use Entry instead of Spinbox for better cross-platform compatibility
+        max_tokens_entry = ttk.Entry(batch_frame, textvariable=self.max_tokens_var, width=10)
+        max_tokens_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+
+        # Save after batch checkbox
+        self.save_after_batch_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(batch_frame, text="Auto-save after batch processing",
+                        variable=self.save_after_batch_var).grid(
+            row=3, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5
+        )
+
         # Action buttons
         button_frame = ttk.Frame(range_frame)
         button_frame.pack(fill=tk.X, padx=5, pady=10)
@@ -753,6 +544,56 @@ class ExcelAIAssistantApp:
         ttk.Button(button_frame, text="Run on Selected Range", command=self._run_transformation).pack(
             side=tk.LEFT, padx=5
         )
+
+        # Analytics tab (create this separately for better organization)
+        self._create_analytics_tab()
+
+    def _create_analytics_tab(self):
+        """Create the analytics tab - separate method for better organization"""
+        # Analytics tab
+        analytics_frame = ttk.Frame(self.control_notebook)
+        self.control_notebook.add(analytics_frame, text="Analytics")
+
+        # Column analytics
+        analytics_col_frame = ttk.LabelFrame(analytics_frame, text="Column Analysis")
+        analytics_col_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(analytics_col_frame, text="Column:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.analytics_column_var = tk.StringVar()
+
+        # Here's the missing combobox
+        self.analytics_column_combobox = ttk.Combobox(analytics_col_frame,
+                                                      textvariable=self.analytics_column_var,
+                                                      state="readonly")
+        self.analytics_column_combobox.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W + tk.E)
+
+        # Add the analyze button
+        ttk.Button(analytics_col_frame, text="Analyze Column",
+                   command=self._analyze_column).grid(
+            row=1, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W + tk.E
+        )
+
+        # Cost estimation
+        cost_frame = ttk.LabelFrame(analytics_frame, text="API Cost Estimation")
+        cost_frame.pack(fill=tk.X, padx=5, pady=10)
+
+        ttk.Button(cost_frame, text="Calculate Estimated Cost",
+                   command=self._calculate_cost).pack(
+            anchor=tk.W, padx=5, pady=5
+        )
+
+        # Add labels for cost info
+        cost_info_frame = ttk.Frame(cost_frame)
+        cost_info_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(cost_info_frame, text="Estimated tokens:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+        self.estimated_tokens_label = ttk.Label(cost_info_frame, text="0")
+        self.estimated_tokens_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
+
+        ttk.Label(cost_info_frame, text="Estimated cost:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+        self.estimated_cost_label = ttk.Label(cost_info_frame, text="$0.00")
+        self.estimated_cost_label.grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
+
 
     def _delete_prompt_template(self):
         """Delete the currently selected prompt template"""
@@ -1074,8 +915,18 @@ class ExcelAIAssistantApp:
     def _update_temperature_label(self, value):
         """Update temperature label when slider is moved"""
         # Format temperature to 1 decimal place
-        temp = float(value)
-        self.temperature_label.config(text=f"{temp:.1f}")
+        try:
+            temp = float(value)
+            self.temperature_label.config(text=f"{temp:.1f}")
+        except (ValueError, tk.TclError):
+            # Handle potential errors across platforms
+            self.temperature_label.config(text="0.3")
+
+    # def _update_temperature_label(self, value):
+    #     """Update temperature label when slider is moved"""
+    #     # Format temperature to 1 decimal place
+    #     temp = float(value)
+    #     self.temperature_label.config(text=f"{temp:.1f}")
 
     def _update_recent_files_menu(self):
         """Update the recent files menu"""
@@ -1366,44 +1217,6 @@ class ExcelAIAssistantApp:
 
         dialog.destroy()
 
-    # def _test_api_connection(self):
-    #     """Test the API connection based on selected API type"""
-    #     api_type = self.config.get('api_type', 'openai')
-    #
-    #     if api_type == 'openai':
-    #         # Get API key
-    #         api_key = self.api_key_entry.get()
-    #
-    #         if not api_key:
-    #             messagebox.showerror("Error", "API Key is required for OpenAI")
-    #             return
-    #
-    #         # Get selected model
-    #         model = self.model_var.get()
-    #
-    #         # Update API manager
-    #         self.api_manager.set_api_type('openai')
-    #         self.api_manager.initialize(api_key)
-    #         self.api_manager.set_model(model)
-    #     else:  # ollama
-    #         # Update API manager
-    #         url = self.ollama_url_var.get()
-    #         model = self.model_var.get()
-    #
-    #         self.api_manager.set_api_type('ollama')
-    #         self.api_manager.set_ollama_url(url)
-    #         self.api_manager.set_model(model)
-    #
-    #     self.status_bar.set_status("Testing API connection...", "info")
-    #
-    #     # Test in a separate thread to prevent UI freezing
-    #     def test_thread():
-    #         success, message = self.api_manager.test_connection()
-    #
-    #         # Update UI in the main thread
-    #         self.root.after(0, lambda: self._update_api_test_result(success, message))
-    #
-    #     threading.Thread(target=test_thread, daemon=True).start()
 
     def _test_api_connection(self):
         """Test the API connection based on selected API type"""
