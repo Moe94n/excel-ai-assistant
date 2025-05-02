@@ -48,9 +48,9 @@ Excel AI Assistant is a Python-based desktop application that helps you apply in
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-**Windows**:
+**Installing `uv` via pip (Windows/Mac/Linux)**:
 ```powershell
-iwr -useb https://astral.sh/uv/install.ps1 | iex
+pip install uv
 ```
 
 ### Step-by-Step Installation
