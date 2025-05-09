@@ -528,11 +528,19 @@ class ExcelAIAssistantApp:
         max_tokens_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
 
         # Save after batch checkbox
-        self.save_after_batch_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(batch_frame, text="Auto-save after batch processing",
-                        variable=self.save_after_batch_var).grid(
-            row=3, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5
+        # Enable auto-save by default
+        self.save_after_batch_var = tk.BooleanVar(value=True)
+        
+        # Create a frame with highlight background for the auto-save checkbox
+        auto_save_frame = ttk.Frame(batch_frame, relief=tk.GROOVE, borderwidth=2)
+        auto_save_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W+tk.E, padx=5, pady=8)
+        
+        auto_save_check = ttk.Checkbutton(
+            auto_save_frame, 
+            text="Auto-save after batch processing (saves changes immediately)",
+            variable=self.save_after_batch_var
         )
+        auto_save_check.pack(padx=10, pady=5, fill=tk.X)
 
         # Action buttons
         button_frame = ttk.Frame(range_frame)
@@ -1426,6 +1434,91 @@ class ExcelAIAssistantApp:
         except ValueError as e:
             messagebox.showerror("Error", f"Invalid range: {str(e)}")
             return None, None
+            
+    def _select_context_columns(self, processing_columns):
+        """Show a dialog to select context columns for processing"""
+        if self.data_manager.df is None:
+            return None
+            
+        # Get all possible columns that aren't already selected for processing
+        all_columns = list(self.data_manager.df.columns)
+        available_columns = [col for col in all_columns if col not in processing_columns]
+        
+        if not available_columns:
+            # No additional columns available for context
+            return None
+            
+        # Create dialog to select context columns
+        context_dialog = tk.Toplevel(self.root)
+        context_dialog.title("Select Context Columns")
+        context_dialog.geometry("400x500")  # Increased height to ensure buttons are visible
+        context_dialog.transient(self.root)
+        context_dialog.grab_set()
+        context_dialog.update_idletasks()  # Force geometry update
+        
+        # Set up dialog layout
+        ttk.Label(context_dialog, text="Select columns to provide context for AI processing:", 
+                 wraplength=380).pack(pady=10, padx=10)
+        
+        # Add explanation text
+        explanation = ttk.Label(context_dialog, text="Context columns provide additional information to the AI when processing cells. "
+                               "For example, you might want to include a 'Name' column as context when processing a 'Description' column.",
+                               wraplength=380)
+        explanation.pack(pady=5, padx=10)
+        
+        # Create frame for checkboxes
+        checkbox_frame = ttk.Frame(context_dialog)
+        checkbox_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
+        
+        # Add a canvas with scrollbar for many columns
+        canvas = tk.Canvas(checkbox_frame)
+        scrollbar = ttk.Scrollbar(checkbox_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Add checkboxes for columns
+        column_vars = {}
+        for col in available_columns:
+            var = tk.BooleanVar(value=False)
+            column_vars[col] = var
+            ttk.Checkbutton(scrollable_frame, text=col, variable=var).pack(anchor=tk.W, pady=2)
+        
+        # Add buttons
+        button_frame = ttk.Frame(context_dialog)
+        button_frame.pack(pady=10, fill=tk.X)
+        
+        # Selected columns variable to return
+        selected_context = []
+        
+        # OK button command
+        def on_ok():
+            nonlocal selected_context
+            selected_context = [col for col, var in column_vars.items() if var.get()]
+            context_dialog.destroy()
+        
+        # Cancel button command
+        def on_cancel():
+            nonlocal selected_context
+            selected_context = []
+            context_dialog.destroy()
+        
+        ttk.Button(button_frame, text="OK", command=on_ok).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side=tk.RIGHT, padx=10)
+        
+        # Wait for dialog to close
+        self.root.wait_window(context_dialog)
+        
+        return selected_context if selected_context else None
 
     def _run_transformation(self):
         """Run the transformation on the selected range"""
@@ -1437,6 +1530,9 @@ class ExcelAIAssistantApp:
         range_info, columns = self._get_selected_range()
         if range_info is None or not columns:
             return
+            
+        # Ask for context columns if needed
+        context_columns = self._select_context_columns(columns)
 
         start_row, end_row = range_info
 
@@ -1448,8 +1544,8 @@ class ExcelAIAssistantApp:
         if end_row > len(self.data_manager.df):
             end_row = len(self.data_manager.df)
 
-        # Get cells to process
-        cells_to_process = self.data_manager.get_range(start_row, end_row, columns)
+        # Get cells to process with context columns
+        cells_to_process = self.data_manager.get_range(start_row, end_row, columns, context_columns)
 
         if not cells_to_process:
             messagebox.showinfo("Info", "No cells to process in the selected range")
@@ -1476,6 +1572,9 @@ class ExcelAIAssistantApp:
         # Get prompts
         system_prompt = self.system_prompt.get("1.0", tk.END).strip()
         user_prompt = self.user_prompt.get("1.0", tk.END).strip()
+        
+        # Initialize progress window reference to None initially
+        self.progress_window = None
 
         # Create progress window
         progress_window = tk.Toplevel(self.root)
@@ -1486,6 +1585,37 @@ class ExcelAIAssistantApp:
 
         # Make dialog modal
         progress_window.focus_set()
+        
+        # Store reference to progress window
+        self.progress_window = progress_window
+        
+        # Add protocol handler for window closing
+        def on_close():
+            # Auto-save if enabled when user closes window
+            if self.save_after_batch_var.get() and self.data_manager.modified:
+                try:
+                    self.log("Saving changes before closing progress window...")
+                    success, msg = self.data_manager.save_file()
+                    if success:
+                        self.log("Changes saved successfully")
+                        # Refresh main window
+                        self._refresh_data_view()
+                    else:
+                        self.log(f"Failed to save: {msg}", "ERROR")
+                except Exception as e:
+                    self.log(f"Error during save: {str(e)}", "ERROR")
+            
+            # Cancel processing
+            self.batch_processor.cancel_processing()
+            
+            # Update status
+            self.status_bar.set_status("Processing cancelled by closing window", "warning")
+            
+            # Destroy window
+            progress_window.destroy()
+            
+        # Set protocol for window close event
+        progress_window.protocol("WM_DELETE_WINDOW", on_close)
 
         # Apply theme
         bg_color = self.theme_manager.get_theme_color('bg')
@@ -1545,45 +1675,153 @@ class ExcelAIAssistantApp:
         )
 
     def _cancel_processing(self):
-        """Cancel batch processing"""
-        self.batch_processor.cancel_processing()
-        self.log("Processing cancelled by user", "WARNING")
-        self.status_bar.set_status("Processing cancelled", "warning")
+        """Cancel batch processing with error handling"""
+        try:
+            # Cancel the batch processor
+            self.batch_processor.cancel_processing()
+            self.log("Processing cancelled by user", "WARNING")
+            
+            # If auto-save is enabled and data is modified, save changes made so far
+            if self.save_after_batch_var.get() and self.data_manager.modified:
+                try:
+                    self.log("Saving changes made before cancellation...")
+                    success, error_msg = self.data_manager.save_file()
+                    if success:
+                        self.log("Changes saved successfully")
+                        self.status_bar.set_status("Processing cancelled, changes saved", "warning")
+                    else:
+                        self.log(f"Failed to save changes: {error_msg}", "ERROR")
+                        self.status_bar.set_status("Processing cancelled, save failed", "error")
+                except Exception as e:
+                    self.log(f"Error during auto-save: {str(e)}", "ERROR")
+                    self.status_bar.set_status("Processing cancelled, auto-save error", "error")
+            else:
+                self.status_bar.set_status("Processing cancelled", "warning")
+        except Exception as e:
+            # Catch any errors to prevent application crash
+            self.log(f"Error during cancellation: {str(e)}", "ERROR")
+            self.status_bar.set_status("Processing cancelled with errors", "error")
 
     def _update_batch_progress(self, processed: int, success_count: int, error_count: int, total: int, status: str):
-        """Update batch processing progress"""
-        # Update progress bar
-        progress_value = min(processed, total)
-        progress_percentage = (progress_value / total) * 100 if total > 0 else 0
+        """Update batch processing progress with error handling"""
+        try:
+            # Check if progress window exists and is valid
+            if not hasattr(self, 'progress_window') or not self.progress_window.winfo_exists():
+                # Only log progress to console
+                progress_percentage = (processed / total) * 100 if total > 0 else 0
+                if processed % 10 == 0 or processed == total:
+                    self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
+                return
+            
+            # Update progress bar
+            progress_value = min(processed, total)
+            progress_percentage = (progress_value / total) * 100 if total > 0 else 0
 
-        # Update status text
-        self.progress_status.config(text=status)
+            # Update status text - use try/except for each UI update
+            try:
+                if hasattr(self, 'progress_status') and self.progress_status.winfo_exists():
+                    self.progress_status.config(text=status)
+            except Exception:
+                pass
 
-        # Update counts
-        self.processed_count.config(text=str(processed))
-        self.success_count.config(text=str(success_count))
-        self.failed_count.config(text=str(error_count))
+            # Update counts - use try/except for each UI update
+            try:
+                if hasattr(self, 'processed_count') and self.processed_count.winfo_exists():
+                    self.processed_count.config(text=str(processed))
+            except Exception:
+                pass
+                
+            try:
+                if hasattr(self, 'success_count') and self.success_count.winfo_exists():
+                    self.success_count.config(text=str(success_count))
+            except Exception:
+                pass
+                
+            try:
+                if hasattr(self, 'failed_count') and self.failed_count.winfo_exists():
+                    self.failed_count.config(text=str(error_count))
+            except Exception:
+                pass
 
-        # Log progress
-        if processed % 10 == 0 or processed == total:
-            self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
+            # Log progress
+            if processed % 10 == 0 or processed == total:
+                self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
+                
+        except Exception as e:
+            # If any error occurs, just log it and continue
+            print(f"Error updating progress: {str(e)}")
+            # Still log progress to console
+            if processed % 10 == 0 or processed == total:
+                progress_percentage = (processed / total) * 100 if total > 0 else 0
+                self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
+
+    def _refresh_data_view(self):
+        """Refresh the data view with the current file data"""
+        try:
+            self.log("Refreshing view with saved data...")
+            # Reload the saved file to ensure UI is synchronized with file
+            if self.data_manager.file_path and os.path.exists(self.data_manager.file_path):
+                # Keep a reference to the current file path
+                current_path = self.data_manager.file_path
+                # Reload the file to refresh the data
+                success, error_msg = self.data_manager.load_file(current_path)
+                if success:
+                    self.log("View refreshed with saved data")
+                    # Update the treeview with fresh data
+                    self.data_treeview.set_data(self.data_manager.get_data())
+                    
+                    # Update column list
+                    self._update_column_lists()
+                else:
+                    self.log(f"Error refreshing view: {error_msg}", "ERROR")
+        except Exception as e:
+            # Handle any exception that might occur during the refresh
+            self.log(f"Error refreshing view: {str(e)}", "ERROR")
 
     def _processing_completed(self, results: List[Dict[str, Any]], success_count: int, error_count: int):
         """Handle batch processing completion"""
-        # Update data manager with results
-        success, error = self.data_manager.update_range([r for r in results if r.get('success', False)])
+        try:
+            # Check if progress window still exists, if not abort
+            if not hasattr(self, 'progress_window') or not self.progress_window.winfo_exists():
+                self.log("Processing dialog was closed - aborting completion")
+                return
+                
+            # Get only successful results
+            successful_results = [r for r in results if r.get('success', False)]
+            
+            # Update data manager with results, passing auto_save flag from UI setting
+            auto_save_enabled = self.save_after_batch_var.get()
+            success, error = self.data_manager.update_range(
+                successful_results, 
+                auto_save=auto_save_enabled
+            )
 
-        # Update treeview
-        self.data_treeview.update_batch([r for r in results if r.get('success', False)])
+            # Update treeview to show changes
+            self.data_treeview.update_batch(successful_results)
+            
+            # Force reload data if auto-save is enabled to ensure UI reflects saved changes
+            if auto_save_enabled and success_count > 0 and self.data_manager.file_path:
+                self._refresh_data_view()
 
-        # Log completion
-        self.log(
-            f"Processing completed: {len(results)} cells processed, {success_count} successful, {error_count} failed")
-        self.status_bar.set_status(f"Processing completed: {success_count} successful, {error_count} failed")
-
-        # Auto-save if enabled
-        if self.save_after_batch_var.get() and success_count > 0:
-            self.save_file()
+            # Log completion
+            self.log(
+                f"Processing completed: {len(results)} cells processed, {success_count} successful, {error_count} failed")
+            
+            # Add auto-save status to log if enabled
+            if auto_save_enabled and success_count > 0:
+                self.log(f"Auto-save completed for file: {self.data_manager.file_path}")
+                self.status_bar.set_status(f"Processing completed and saved: {success_count} successful, {error_count} failed")
+            else:
+                self.status_bar.set_status(f"Processing completed: {success_count} successful, {error_count} failed")
+                
+            # Clean up progress window references
+            if hasattr(self, 'progress_window') and self.progress_window.winfo_exists():
+                self.progress_window.destroy()
+            self.progress_window = None
+                
+        except Exception as e:
+            self.log(f"Error during processing completion: {str(e)}", "ERROR")
+            self.status_bar.set_status("Error during processing completion", "error")
 
     def _apply_filter(self):
         """Apply filter to results treeview"""

@@ -15,6 +15,9 @@ Excel AI Assistant is a Python-based desktop application that helps you apply in
 - **Dual AI Backend Options**:
   - **OpenAI API**: Use cloud-based GPT models for high-quality results
   - **Ollama Integration**: Process data locally with open-source models for privacy and cost savings
+- **Column Context Understanding**: Process cells with context from other columns for more intelligent transformations
+- **Row Numbering**: Clear row numbering with total row count display for better navigation
+- **Auto-Save Capability**: Automatically save changes to source files after batch processing
 - **Customizable Templates**: Save your favorite prompts for quick reuse
 - **Batch Processing**: Apply transformations to multiple cells efficiently
 - **Interactive Data View**: View, edit, and copy cell data with an intuitive interface
@@ -100,8 +103,10 @@ python main.py
 1. **Open a File**: Click "Open" in the toolbar or File menu to load an Excel or CSV file
 2. **Select API**: Choose between OpenAI or Ollama for processing
 3. **Set Range**: Specify the row range and columns to process
-4. **Configure Prompt**: Enter instructions or select a template from the dropdown
-5. **Process Data**: Click "Run on Selected Range" to apply the transformation
+4. **Select Context Columns**: Choose additional columns that provide context for AI processing (optional)
+5. **Configure Prompt**: Enter instructions or select a template from the dropdown
+6. **Enable Auto-Save**: Toggle auto-save to automatically apply changes to the source file
+7. **Process Data**: Click "Run on Selected Range" to apply the transformation
 
 
 ### Using Templates
@@ -127,6 +132,31 @@ For private data processing or offline use, Excel AI Assistant supports local mo
 4. Select your preferred model from the dropdown
 5. Process your data with complete privacy - nothing leaves your computer!
 
+### New Features
+
+#### Column Context Understanding
+The application can now use data from other columns as context when processing a cell:
+
+1. When running a transformation, you'll be prompted to select context columns
+2. Select any columns that provide relevant context for the AI
+3. The AI will consider this additional context when processing each cell, resulting in more intelligent transformations
+
+#### Auto-Save Functionality
+Enable auto-save to automatically apply changes to the source file:
+
+1. Before running a transformation, check the "Auto-save after batch processing" box
+2. When batch processing completes, changes will be saved directly to the file
+3. The application will refresh to show the latest saved data
+4. Even when canceling mid-process, completed changes will be saved if auto-save is enabled
+
+#### Improved Data View
+The data view now includes:
+
+1. Row numbers for easy reference
+2. Total row count display in the header
+3. Better error handling and UI feedback
+4. Improved resilience to processing interruptions
+
 ## Configuration
 
 Access settings through Edit > Preferences to configure:
@@ -151,10 +181,22 @@ The `design/` folder contains React mockups of the application's interface. Thes
 ### Installation Issues
 - If you see an error about "Multiple top-level packages discovered", use `uv sync` instead of `uv pip install -e .`
 
+### Auto-Save Issues
+- If auto-save doesn't appear to work, verify file permissions
+- Check that you're able to write to the selected file location
+- Look for error messages in the status bar at the bottom of the window
+- Try closing other applications that might have the file open
+
+### Context Column Tips
+- Choose context columns that provide relevant information for your transformation
+- Don't select too many context columns as this may confuse the AI or slow down processing
+- Order your context selections with the most important columns first
+
 ### Performance Tips
 - For large files, increase the batch size in preferences
 - If using Ollama, smaller models are faster but may be less accurate
 - Enable multi-threading in Advanced settings for better performance
+- Consider processing smaller ranges if dealing with very large datasets
 
 ## Contributing
 

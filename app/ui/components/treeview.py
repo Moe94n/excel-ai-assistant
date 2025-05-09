@@ -103,9 +103,16 @@ class DataTreeview:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        # Configure columns
-        self.tree["columns"] = list(df.columns)
-
+        # Configure columns - add a row number column first
+        columns = ['#Row'] + list(df.columns)
+        self.tree["columns"] = columns
+        
+        # Add row number column heading with total row count
+        total_rows = len(df)
+        self.tree.heading('#Row', text=f"Row # (of {total_rows})")
+        self.tree.column('#Row', width=100, anchor=tk.CENTER)
+        
+        # Configure data columns
         for col in df.columns:
             self.tree.heading(col, text=col, command=lambda c=col: self._sort_by_column(c))
 
@@ -118,14 +125,20 @@ class DataTreeview:
         display_df = df.head(max_rows) if len(df) > max_rows else df
 
         for i, (idx, row) in enumerate(display_df.iterrows()):
-            values = [str(val) if val is not None else "" for val in row]
+            # Create values list with row number as first column (1-based for user display)
+            display_row_num = idx + 1  # Convert to 1-based indexing for display
+            values = [f"{display_row_num}"] + [str(val) if val is not None else "" for val in row]
+            
+            # Set row tag for styling
             row_tag = "row_even" if i % 2 == 0 else "row_odd"
+            
+            # Insert row with row number into treeview
             self.tree.insert("", tk.END, iid=str(idx), values=values, tags=(row_tag,))
 
         # Add a "more rows" indicator if necessary
         if len(df) > max_rows:
-            more_values = [""] * (len(df.columns) - 1)
-            more_values.append(f"... {len(df) - max_rows} more rows")
+            more_values = [""] * len(columns)  # One more column now for row numbers
+            more_values[-1] = f"... {len(df) - max_rows} more rows"
             self.tree.insert("", tk.END, values=more_values, tags=("more_rows",))
 
     def update_cell(self, row: int, col: str, value: Any):
@@ -148,8 +161,8 @@ class DataTreeview:
         # Get current values
         current_values = list(self.tree.item(item_id)["values"])
 
-        # Find column index
-        col_idx = list(self.df.columns).index(col)
+        # Find column index (add +1 because of the row number column)
+        col_idx = list(self.df.columns).index(col) + 1  # +1 for row number column
 
         # Update value in the list
         current_values[col_idx] = str(value) if value is not None else ""
@@ -223,10 +236,18 @@ class DataTreeview:
 
             # Convert column id (#1, #2, etc.) to column name
             col_idx = int(col_id.replace("#", "")) - 1
-            if col_idx < 0 or col_idx >= len(self.df.columns):
+            
+            # First column is row number, so we need to adjust the index
+            if col_idx == 0:
+                # This is the row number column, nothing to edit
+                return
+                
+            # Adjust index for data columns (subtract 1 to account for row number column)
+            data_col_idx = col_idx - 1
+            if data_col_idx < 0 or data_col_idx >= len(self.df.columns):
                 return
 
-            col_name = self.df.columns[col_idx]
+            col_name = self.df.columns[data_col_idx]
 
             # Convert item_id to row index
             try:
@@ -311,10 +332,18 @@ class DataTreeview:
 
         # Convert column id (#1, #2, etc.) to column name
         col_idx = int(col_id.replace("#", "")) - 1
-        if col_idx < 0 or col_idx >= len(self.df.columns):
+        
+        # First column is row number, so we need to adjust the index
+        if col_idx == 0:
+            # This is the row number column, nothing to edit
+            return
+            
+        # Adjust index for data columns (subtract 1 to account for row number column)
+        data_col_idx = col_idx - 1
+        if data_col_idx < 0 or data_col_idx >= len(self.df.columns):
             return
 
-        col_name = self.df.columns[col_idx]
+        col_name = self.df.columns[data_col_idx]
 
         # Convert item_id to row index
         try:

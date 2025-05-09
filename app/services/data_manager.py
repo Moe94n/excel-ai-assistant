@@ -192,12 +192,13 @@ class DataManager:
             self.logger.error(f"Error updating cell: {str(e)}")
             return False
 
-    def update_range(self, updates: List[Dict[str, Any]]) -> Tuple[int, int]:
+    def update_range(self, updates: List[Dict[str, Any]], auto_save: bool = False) -> Tuple[int, int]:
         """
-        Update multiple cells at once
+        Update multiple cells at once and optionally auto-save
 
         Args:
             updates: List of dictionaries with row, col, and value keys
+            auto_save: Whether to automatically save changes to the source file after updating
 
         Returns:
             Tuple of (updates_applied, failed_updates)
@@ -224,20 +225,34 @@ class DataManager:
 
         if success_count > 0:
             self.modified = True
+            
+            # Auto-save if requested and we have a file path
+            if auto_save and self.file_path and success_count > 0:
+                self.logger.info(f"Auto-saving changes to {self.file_path}")
+                try:
+                    save_success, error_msg = self.save_file()
+                    if not save_success:
+                        self.logger.error(f"Auto-save failed: {error_msg}")
+                    else:
+                        self.logger.info("Auto-save successful")
+                except Exception as e:
+                    self.logger.error(f"Auto-save exception: {str(e)}")
 
         return success_count, error_count
 
-    def get_range(self, start_row: int, end_row: int, columns: List[str]) -> List[Dict[str, Any]]:
+    def get_range(self, start_row: int, end_row: int, columns: List[str], 
+                context_columns: List[str] = None) -> List[Dict[str, Any]]:
         """
-        Get a range of cells
+        Get a range of cells with optional context columns
 
         Args:
             start_row: Starting row index
             end_row: Ending row index (exclusive)
-            columns: List of column names
+            columns: List of column names to process
+            context_columns: Optional list of column names to include as context
 
         Returns:
-            List of dictionaries with row, col, and content keys
+            List of dictionaries with row, col, content, and optional context_data keys
         """
         if self.df is None:
             return []
@@ -253,16 +268,35 @@ class DataManager:
         valid_columns = [col for col in columns if col in self.df.columns]
         if not valid_columns:
             return []
+            
+        # Validate context columns
+        valid_context_columns = []
+        if context_columns:
+            valid_context_columns = [col for col in context_columns if col in self.df.columns and col not in valid_columns]
 
         # Build result
         result = []
         for row in range(start_row, end_row):
             for col in valid_columns:
-                result.append({
+                cell_data = {
                     'row': row,
                     'col': col,
                     'content': self.df.loc[row, col]
-                })
+                }
+                
+                # Add context data from other columns if requested
+                if valid_context_columns:
+                    context_data = {}
+                    # Add column headers as context
+                    for ctx_col in valid_context_columns:
+                        context_data[ctx_col] = self.df.loc[row, ctx_col]
+                    
+                    # Add column headers as additional context
+                    context_data["headers"] = {col: col for col in valid_columns + valid_context_columns}
+                    
+                    cell_data['context_data'] = context_data
+                
+                result.append(cell_data)
 
         return result
 

@@ -177,14 +177,16 @@ class BatchProcessor:
         """Process a single cell asynchronously"""
         try:
             cell_content = str(cell['content'])
-            formatted_prompt = f"{user_prompt}\n\nCell content: {cell_content}"
-
+            
+            # Get context data from the cell if present
+            context_data = cell.get('context_data', None)
+            
             # Use a Future to run the API call in the default executor
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 None,
                 lambda: self.api_manager.process_single_cell(
-                    cell_content, system_prompt, user_prompt, temperature, max_tokens
+                    cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data
                 )
             )
 
@@ -202,9 +204,19 @@ class BatchProcessor:
             total: int,
             status: str
     ):
-        """Update progress in main thread"""
+        """Update progress in main thread with error handling"""
         if callback:
-            self.root.after(0, lambda: callback(processed, success_count, error_count, total, status))
+            def safe_callback():
+                try:
+                    # Check if the window still exists before updating UI
+                    if self.root.winfo_exists():
+                        callback(processed, success_count, error_count, total, status)
+                except Exception as e:
+                    # Log error but don't crash
+                    print(f"Error updating progress: {str(e)}")
+            
+            # Schedule the safe callback
+            self.root.after(0, safe_callback)
 
     def _update_batch_progress(
             self,
@@ -218,15 +230,23 @@ class BatchProcessor:
             batch_idx: int,
             total_batches: int
     ):
-        """Update progress for a batch in main thread"""
+        """Update progress for a batch in main thread with error handling"""
         if callback:
             # Create status text
             status = f"Processing batch {batch_idx + 1} of {total_batches}: {batch_current}/{batch_total} cells"
 
+            # Safe callback with error handling
+            def safe_callback():
+                try:
+                    # Check if the window still exists before updating UI
+                    if self.root.winfo_exists():
+                        callback(processed, success_count, error_count, total, status)
+                except Exception as e:
+                    # Log error but don't crash
+                    print(f"Error updating batch progress: {str(e)}")
+            
             # Update in main thread
-            self.root.after(0, lambda: callback(
-                processed, success_count, error_count, total, status
-            ))
+            self.root.after(0, safe_callback)
 
     def _call_completion(
             self,
@@ -235,6 +255,17 @@ class BatchProcessor:
             success_count: int,
             error_count: int
     ):
-        """Call completion callback in main thread"""
+        """Call completion callback in main thread with error handling"""
         if callback:
-            self.root.after(0, lambda: callback(results, success_count, error_count))
+            # Use a wrapped function to handle possible exceptions
+            def safe_callback():
+                try:
+                    callback(results, success_count, error_count)
+                except Exception as e:
+                    print(f"Error in completion callback: {str(e)}")
+                    # Log error to console but prevent crash
+                    import logging
+                    logging.exception("Error in batch completion callback")
+            
+            # Schedule the safe callback
+            self.root.after(0, safe_callback)

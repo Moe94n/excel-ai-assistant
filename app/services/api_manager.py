@@ -140,19 +140,28 @@ class APIManager:
             system_prompt: str,
             user_prompt: str,
             temperature: float = 0.3,
-            max_tokens: int = 150
+            max_tokens: int = 150,
+            context_data: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Process a single cell using the selected API
+
+        Args:
+            cell_content: The content of the cell being processed
+            system_prompt: System prompt for the AI
+            user_prompt: User prompt for the AI
+            temperature: Temperature parameter for generation
+            max_tokens: Maximum tokens in response
+            context_data: Optional dictionary with context data from other columns
 
         Returns:
             Tuple of (success, result, error_message)
         """
         if self.api_type == APIType.OPENAI:
-            return self._process_openai(cell_content, system_prompt, user_prompt, temperature, max_tokens)
+            return self._process_openai(cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data)
         else:  # OLLAMA
             return self.ollama_manager.process_single_cell(
-                cell_content, system_prompt, user_prompt, temperature, max_tokens
+                cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data
             )
 
     def _process_openai(
@@ -161,7 +170,8 @@ class APIManager:
             system_prompt: str,
             user_prompt: str,
             temperature: float = 0.3,
-            max_tokens: int = 150
+            max_tokens: int = 150,
+            context_data: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Process a single cell using OpenAI API"""
         if not self.client:
@@ -173,6 +183,13 @@ class APIManager:
             return False, None, "Rate limit exceeded. Please try again later."
 
         formatted_prompt = f"{user_prompt}\n\nCell content: {cell_content}"
+        
+        # Add context information if available
+        if context_data and len(context_data) > 0:
+            context_text = "\n\nContext information:\n"
+            for key, value in context_data.items():
+                context_text += f"- {key}: {value}\n"
+            formatted_prompt += context_text
 
         try:
             # Make API call

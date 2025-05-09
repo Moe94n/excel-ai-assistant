@@ -91,11 +91,20 @@ class OllamaAPIManager:
             system_prompt: str,
             user_prompt: str,
             temperature: float = 0.3,
-            max_tokens: int = 150
+            max_tokens: int = 150,
+            context_data: Optional[dict] = None
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Process a single cell using Ollama
 
+        Args:
+            cell_content: The content of the cell being processed
+            system_prompt: System prompt for the AI
+            user_prompt: User prompt for the AI
+            temperature: Temperature parameter for generation
+            max_tokens: Maximum tokens in response
+            context_data: Optional dictionary with context data from other columns
+            
         Returns:
             Tuple of (success, result, error_message)
         """
@@ -103,6 +112,13 @@ class OllamaAPIManager:
             return False, None, "Rate limit exceeded. Please try again later."
 
         formatted_prompt = f"{user_prompt}\n\nCell content: {cell_content}"
+        
+        # Add context information if available
+        if context_data and len(context_data) > 0:
+            context_text = "\n\nContext information:\n"
+            for key, value in context_data.items():
+                context_text += f"- {key}: {value}\n"
+            formatted_prompt += context_text
 
         try:
             # Use streaming for more efficient processing with local models
