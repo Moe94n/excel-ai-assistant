@@ -16,11 +16,13 @@ class AppConfig:
         # Default configuration
         self._config = {
             # API settings
-            'api_type': 'openai',  # 'openai' or 'ollama'
+            'api_type': 'openai',  # 'openai', 'ollama', or 'gemini'
             'api_key': '',  # OpenAI API key
             'model': 'gpt-3.5-turbo',  # Current selected model
             'ollama_url': 'http://localhost:11434',  # Ollama API URL
             'ollama_model': 'llama3',  # Default Ollama model
+            'gemini_api_key': '',  # Gemini API key
+            'gemini_model': 'gemini-1.5-flash',  # Default Gemini model
 
             # UI settings
             'theme': 'system',
@@ -178,6 +180,11 @@ class AppConfig:
                 'api_type': 'openai',
                 'model': self.get('model', 'gpt-3.5-turbo')
             }
+        elif api_type == 'gemini':
+            return {
+                'api_type': 'gemini',
+                'model': self.get('gemini_model', 'gemini-1.5-flash')
+            }
         else:  # ollama
             return {
                 'api_type': 'ollama',
@@ -189,6 +196,8 @@ class AppConfig:
         self.set('api_type', api_type)
         if api_type == 'openai':
             self.set('model', model)
+        elif api_type == 'gemini':
+            self.set('gemini_model', model)
         else:  # ollama
             self.set('ollama_model', model)
 
@@ -246,6 +255,8 @@ class AppConfig:
             'model': 'gpt-3.5-turbo',
             'ollama_url': 'http://localhost:11434',
             'ollama_model': 'llama3',
+            'gemini_api_key': '',
+            'gemini_model': 'gemini-1.5-flash',
 
             # UI settings
             'theme': 'system',
@@ -273,6 +284,10 @@ class AppConfig:
 
         for key, value in defaults.items():
             self._config[key] = value
+
+        # Add Gemini defaults
+        self._config['gemini_api_key'] = ''
+        self._config['gemini_model'] = 'gemini-1.5-flash'
 
         # Keep recent files unless explicitly resetting everything
         if not include_prompts:

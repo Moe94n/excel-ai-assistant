@@ -1,6 +1,6 @@
 """
 API Manager for the Excel AI Assistant.
-Handles interactions with both OpenAI API and local Ollama API.
+Handles interactions with OpenAI API, local Ollama API, and Google's Gemini API.
 """
 
 import logging
@@ -11,37 +11,41 @@ from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI, APIError, RateLimitError
 
 from app.services.ollama_api_manager import OllamaAPIManager
+from app.services.gemini_api_manager import GeminiAPIManager
 
 
 class APIType(Enum):
     """Enum for API types"""
     OPENAI = "openai"
     OLLAMA = "ollama"
+    GEMINI = "gemini"
 
 
 class APIManager:
-    """Manager for interacting with AI APIs (OpenAI and Ollama)"""
+    """Manager for interacting with AI APIs (OpenAI, Ollama, and Gemini)"""
 
     def __init__(self, api_key: str = "", model: str = "gpt-3.5-turbo",
                  api_type: str = "openai", ollama_url: str = "http://localhost:11434"):
-        """Initialize the API manager"""
+        """Initialize the API manager with support for OpenAI, Ollama, and Gemini APIs"""
         self.api_key = api_key
         self.model = model
         self.api_type = APIType(api_type)
         self.client = None
         self.logger = logging.getLogger("APIManager")
 
-        # Initialize Ollama manager
+        # Initialize Ollama and Gemini managers
         self.ollama_url = ollama_url
         self.ollama_manager = OllamaAPIManager(base_url=ollama_url)
+        self.gemini_api_key = api_key  # Will be used for Gemini
+        self.gemini_manager = GeminiAPIManager(api_key=api_key)
 
         # Rate limiting
         self.request_count = 0
         self.request_start_time = time.time()
         self.max_requests_per_minute = 20  # Default safe limit
 
-        # Initialize if API key is provided for OpenAI
-        if api_key and self.api_type == APIType.OPENAI:
+        # Initialize if API key is provided for OpenAI or Gemini
+        if api_key and (self.api_type == APIType.OPENAI or self.api_type == APIType.GEMINI):
             self.initialize()
 
     def initialize(self, api_key: Optional[str] = None) -> bool:
@@ -60,12 +64,16 @@ class APIManager:
             except Exception as e:
                 self.logger.error(f"Failed to initialize OpenAI client: {e}")
                 return False
+        elif self.api_type == APIType.GEMINI:
+            if api_key:
+                self.gemini_api_key = api_key
+            return self.gemini_manager.initialize(self.gemini_api_key)
         else:  # OLLAMA
             # No initialization needed for Ollama as it's handled by requests
             return True
 
     def set_api_type(self, api_type: str) -> None:
-        """Set the API type (openai or ollama)"""
+        """Set the API type (openai, ollama, or gemini)"""
         self.api_type = APIType(api_type)
 
     def set_model(self, model: str) -> None:
@@ -73,6 +81,8 @@ class APIManager:
         self.model = model
         if self.api_type == APIType.OLLAMA:
             self.ollama_manager.set_model(model)
+        elif self.api_type == APIType.GEMINI:
+            self.gemini_manager.set_model(model)
 
     def set_ollama_url(self, url: str) -> None:
         """Set the Ollama API URL"""
@@ -91,6 +101,18 @@ class APIManager:
                 {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "api": "openai"},
                 {"id": "gpt-3.5-turbo-16k", "name": "GPT-3.5 Turbo 16k", "api": "openai"}
             ]
+        elif self.api_type == APIType.GEMINI:
+            # Fetch models from Gemini
+            success, models, error = self.gemini_manager.list_available_models()
+            if success and models:
+                return models
+            else:
+                # Return default Gemini models if error
+                self.logger.error(f"Error getting Gemini models: {error}")
+                return [
+                    {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "api": "gemini"},
+                    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "api": "gemini"}
+                ]
         else:  # OLLAMA
             # Fetch models from Ollama
             success, models, error = self.ollama_manager.list_available_models()
@@ -130,6 +152,8 @@ class APIManager:
                 return False, f"API Error: {str(e)}"
             except Exception as e:
                 return False, f"Error: {str(e)}"
+        elif self.api_type == APIType.GEMINI:
+            return self.gemini_manager.test_connection()
         else:  # OLLAMA
             # Use Ollama manager to test connection
             return self.ollama_manager.test_connection()
@@ -159,6 +183,10 @@ class APIManager:
         """
         if self.api_type == APIType.OPENAI:
             return self._process_openai(cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data)
+        elif self.api_type == APIType.GEMINI:
+            return self.gemini_manager.process_single_cell(
+                cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data
+            )
         else:  # OLLAMA
             return self.ollama_manager.process_single_cell(
                 cell_content, system_prompt, user_prompt, temperature, max_tokens, context_data
