@@ -15,6 +15,7 @@ Excel AI Assistant is a Python-based desktop application that helps you apply in
 - **Dual AI Backend Options**:
   - **OpenAI API**: Use cloud-based GPT models for high-quality results
   - **Ollama Integration**: Process data locally with open-source models for privacy and cost savings
+- **Cloud Storage Integration**: Access files directly from Google Drive, OneDrive, and Dropbox
 - **Column Context Understanding**: Process cells with context from other columns for more intelligent transformations
 - **Row Numbering**: Clear row numbering with total row count display for better navigation
 - **Auto-Save Capability**: Automatically save changes to source files after batch processing
@@ -79,9 +80,14 @@ pip install uv
    - Add your API key: `OPENAI_API_KEY=your_api_key_here`
 
 4. Set up Ollama (optional for local processing):
-   - Install Ollama from [ollama.ai/download](https://ollama.ai/download)
-   - Start the Ollama server: `ollama serve`
-   - Pull a model: `ollama pull llama3.2` (or any other model you prefer) see here: [Ollama GitHub](https://github.com/ollama/ollama)
+    - Install Ollama from [ollama.ai/download](https://ollama.ai/download)
+    - Start the Ollama server: `ollama serve`
+    - Pull a model: `ollama pull llama3.2` (or any other model you prefer) see here: [Ollama GitHub](https://github.com/ollama/ollama)
+
+5. Set up Cloud Storage (optional for cloud file access):
+    - For Google Drive: Follow the setup guide in `docs/google_drive_setup.md`
+    - Test your setup: Run `python test_google_drive.py`
+    - OneDrive and Dropbox integration coming soon
 
 ## Usage
 
@@ -131,6 +137,26 @@ For private data processing or offline use, Excel AI Assistant supports local mo
 3. Use the "Test API" button to verify the connection
 4. Select your preferred model from the dropdown
 5. Process your data with complete privacy - nothing leaves your computer!
+
+### Using Cloud Storage
+
+Access your files directly from popular cloud storage services:
+
+1. **Google Drive Integration**:
+   - Go to File > Cloud Storage > Open from Google Drive
+   - Follow the authentication prompts
+   - Browse and select Excel/CSV files from your Google Drive
+   - Files are downloaded and processed locally, then can be saved back to Google Drive
+
+2. **Supported File Types**:
+   - Excel files (.xlsx, .xls)
+   - CSV files (.csv)
+   - Google Sheets (automatically converted to Excel format)
+
+3. **Cloud Storage Settings**:
+   - Access settings through File > Cloud Storage > Cloud Storage Settings
+   - Configure authentication for different services
+   - Set default cloud storage preferences
 
 ### New Features
 
@@ -197,6 +223,21 @@ The `design/` folder contains React mockups of the application's interface. Thes
 - If using Ollama, smaller models are faster but may be less accurate
 - Enable multi-threading in Advanced settings for better performance
 - Consider processing smaller ranges if dealing with very large datasets
+
+### Cloud Storage Troubleshooting
+
+**Google Drive Issues:**
+
+- **"Google client secrets file not found"**: Run the app and go to File → Cloud Storage → Cloud Storage Settings to configure your credentials
+- **"Authentication failed"**: Check that your client_secrets.json file is valid and you have an internet connection
+- **"Access denied"**: Ensure you've granted the necessary permissions during OAuth setup
+- **Test your setup**: Run `python test_google_drive.py` to verify everything is working
+
+**General Issues:**
+
+- **Files not loading**: Check file permissions and ensure the files aren't corrupted
+- **Slow performance**: Large files may take time to download/upload
+- **Connection timeouts**: Check your internet connection and try again
 
 ## Contributing
 

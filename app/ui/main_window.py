@@ -16,6 +16,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from app.config import AppConfig
 from app.services.api_manager import APIManager
 from app.services.data_manager import DataManager
+from app.services.cloud import GoogleDriveService, CloudStorageManager
 from app.ui.components.batch_processor import BatchProcessor
 from app.ui.components.status_bar import StatusBar
 from app.ui.components.treeview import DataTreeview
@@ -60,6 +61,9 @@ class ExcelAIAssistantApp:
 
         self.data_manager = DataManager()
 
+        # Initialize cloud storage services
+        self.cloud_manager = CloudStorageManager(self.config, self.logger)
+
         # Create menu and UI components
         self._create_menu()
         self._create_ui()
@@ -88,6 +92,15 @@ class ExcelAIAssistantApp:
         file_menu.add_command(label="Open...", command=self.open_file, accelerator="Ctrl+O")
         file_menu.add_command(label="Save", command=self.save_file, accelerator="Ctrl+S")
         file_menu.add_command(label="Save As...", command=self.save_file_as)
+
+        # Cloud Storage submenu
+        cloud_menu = tk.Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="Cloud Storage", menu=cloud_menu)
+        cloud_menu.add_command(label="Open from Google Drive...", command=self._open_from_google_drive)
+        cloud_menu.add_command(label="Open from OneDrive...", command=self._open_from_onedrive)
+        cloud_menu.add_command(label="Open from Dropbox...", command=self._open_from_dropbox)
+        cloud_menu.add_separator()
+        cloud_menu.add_command(label="Cloud Storage Settings...", command=self._open_cloud_settings)
 
         # Recent files submenu
         self.recent_menu = tk.Menu(file_menu, tearoff=0)
@@ -383,41 +396,65 @@ class ExcelAIAssistantApp:
     def _load_ollama_models(self):
         """Load available Ollama models in a background thread"""
         try:
+            self.logger.info("Starting Ollama model loading process")
+            thread_id = threading.get_ident()
+            self.logger.debug(f"Thread ID for Ollama loading: {thread_id}")
+
             # Ensure API manager is using Ollama
             self.api_manager.set_api_type('ollama')
             self.api_manager.set_ollama_url(self.ollama_url_var.get())
+            self.logger.debug(f"Set Ollama URL to: {self.ollama_url_var.get()}")
 
             # Get models
+            self.logger.debug("Fetching available Ollama models")
             models = self.api_manager.get_available_models()
             model_names = [model["name"] for model in models]
+            self.logger.info(f"Retrieved {len(model_names)} Ollama models: {model_names}")
 
             # Update UI in main thread
-            self.root.after(0, lambda: self._update_ollama_models(model_names))
+            self.logger.debug("Scheduling UI update for Ollama models")
+            self._safe_ui_update(self._update_ollama_models, model_names)
+            self.logger.debug("UI update scheduled successfully")
         except Exception as e:
+            self.logger.error(f"Error loading Ollama models: {str(e)}")
+            self.logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             self.log(f"Error loading Ollama models: {str(e)}", "ERROR")
-            self.root.after(0, lambda: self._update_ollama_models([]))
+            self.logger.debug("Scheduling error UI update")
+            self._safe_ui_update(self._update_ollama_models, [])
+            self.logger.debug("Error UI update scheduled successfully")
 
 
     def _update_ollama_models(self, model_names):
         """Update the UI with loaded Ollama models"""
+        thread_id = threading.get_ident()
+        self.logger.debug(f"Ollama models UI update called from thread {thread_id}")
+
         if model_names:
+            self.logger.debug(f"Updating UI with {len(model_names)} Ollama models")
             self.model_combobox['values'] = model_names
 
             # Set current model or first available
             current_model = self.config.get('ollama_model', '')
             if current_model in model_names:
                 self.model_combobox.set(current_model)
+                self.logger.debug(f"Set current Ollama model: {current_model}")
             else:
                 self.model_combobox.set(model_names[0])
                 self.config.set('ollama_model', model_names[0])
+                self.logger.debug(f"Set default Ollama model: {model_names[0]}")
 
             # Update API manager
             self.api_manager.set_model(self.model_combobox.get())
+            self.logger.debug("Ollama models UI update completed successfully")
         else:
             # No models found
+            self.logger.warning("No Ollama models found")
             self.model_combobox['values'] = ["No models found"]
             self.model_combobox.set("No models found")
             self.log("No Ollama models found. Make sure Ollama is running and models are installed.", "WARNING")
+            self.logger.debug("Ollama models error UI update completed")
 
     def _on_api_type_changed(self, event=None):
         """Handle API type combobox selection"""
@@ -760,8 +797,79 @@ class ExcelAIAssistantApp:
         self.batch_processor = BatchProcessor(self.root, self.api_manager, self.loop)
 
         # Start a thread to run the event loop
-        self.loop_thread = threading.Thread(target=self._run_event_loop, daemon=True)
+        self.loop_thread = threading.Thread(target=self._run_event_loop, daemon=True, name="AsyncEventLoop")
         self.loop_thread.start()
+        self.logger.debug(f"Async event loop thread started: {self.loop_thread.ident}")
+
+        # Keep track of active threads for cleanup
+        self.active_threads = set()
+
+    def _create_tracked_thread(self, target, name=None, daemon=True, *args, **kwargs):
+        """
+        Create a thread with tracking for cleanup purposes.
+
+        Args:
+            target: Thread target function
+            name: Thread name for debugging
+            daemon: Whether thread should be daemon
+            *args: Arguments to pass to target
+            **kwargs: Keyword arguments to pass to target
+
+        Returns:
+            threading.Thread: The created thread
+        """
+        def tracked_target(*args, **kwargs):
+            thread_id = threading.get_ident()
+            self.logger.debug(f"Thread {thread_id} ({name}) starting")
+            try:
+                target(*args, **kwargs)
+            except Exception as e:
+                self.logger.error(f"Exception in thread {thread_id} ({name}): {str(e)}")
+                import traceback
+                self.logger.error(f"Thread traceback: {traceback.format_exc()}")
+            finally:
+                # Remove from active threads when done
+                self.active_threads.discard(thread_id)
+                self.logger.debug(f"Thread {thread_id} ({name}) completed")
+
+        thread = threading.Thread(target=tracked_target, name=name, daemon=daemon, *args, **kwargs)
+        self.active_threads.add(thread.ident)
+        self.logger.debug(f"Created tracked thread: {thread.ident} ({name})")
+        return thread
+
+    def _safe_ui_update(self, callback, *args, **kwargs):
+        """
+        Safely update UI from a background thread.
+
+        Args:
+            callback: Function to call in the main thread
+            *args: Arguments to pass to the callback
+            **kwargs: Keyword arguments to pass to the callback
+        """
+        if not hasattr(self, 'root') or not self.root.winfo_exists():
+            self.logger.warning("Cannot update UI: root window does not exist")
+            return
+
+        try:
+            self.root.after(0, lambda: self._execute_ui_callback(callback, *args, **kwargs))
+        except Exception as e:
+            self.logger.error(f"Failed to schedule UI update: {str(e)}")
+
+    def _execute_ui_callback(self, callback, *args, **kwargs):
+        """
+        Execute UI callback with error handling.
+
+        Args:
+            callback: Function to execute
+            *args: Arguments to pass to the callback
+            **kwargs: Keyword arguments to pass to the callback
+        """
+        try:
+            callback(*args, **kwargs)
+        except Exception as e:
+            self.logger.error(f"Error executing UI callback {callback.__name__}: {str(e)}")
+            import traceback
+            self.logger.error(f"UI callback traceback: {traceback.format_exc()}")
 
     def _run_event_loop(self):
         """Run asyncio event loop in the background"""
@@ -795,11 +903,30 @@ class ExcelAIAssistantApp:
         # Save configuration
         self._save_config()
 
+        # Clean up active threads
+        self._cleanup_threads()
+
         # Stop asyncio loop
-        self.loop.call_soon_threadsafe(self.loop.stop)
+        if hasattr(self, 'loop') and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
 
         # Destroy the root window
         self.root.destroy()
+
+    def _cleanup_threads(self):
+        """Clean up active threads on application close"""
+        self.logger.info(f"Cleaning up {len(self.active_threads)} active threads")
+
+        # Wait for threads to finish (with timeout)
+        for thread_id in list(self.active_threads):
+            try:
+                # Note: We can't directly wait for daemon threads, but we can log their status
+                self.logger.debug(f"Active thread during cleanup: {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Error during thread cleanup: {str(e)}")
+
+        self.active_threads.clear()
+        self.logger.info("Thread cleanup completed")
 
     def _save_config(self):
         """Save current configuration"""
@@ -1000,12 +1127,6 @@ class ExcelAIAssistantApp:
             # Handle potential errors across platforms
             self.temperature_label.config(text="0.3")
 
-    # def _update_temperature_label(self, value):
-    #     """Update temperature label when slider is moved"""
-    #     # Format temperature to 1 decimal place
-    #     temp = float(value)
-    #     self.temperature_label.config(text=f"{temp:.1f}")
-
     def _update_recent_files_menu(self):
         """Update the recent files menu"""
         # Clear existing menu items
@@ -1083,16 +1204,30 @@ class ExcelAIAssistantApp:
 
         # Load file in a separate thread
         def load_thread():
-            success, error_msg = self.data_manager.load_file(file_path)
+            thread_id = threading.get_ident()
+            self.logger.debug(f"Starting file load thread {thread_id} for: {file_path}")
+            try:
+                success, error_msg = self.data_manager.load_file(file_path)
+                self.logger.debug(f"File load completed in thread {thread_id}, success: {success}")
+            except Exception as e:
+                self.logger.error(f"Exception in file load thread {thread_id}: {str(e)}")
+                success, error_msg = False, str(e)
 
             # Update UI in main thread
-            self.root.after(0, lambda: self._update_after_file_load(success, error_msg, file_path))
+            self.logger.debug(f"Scheduling UI update from thread {thread_id}")
+            self._safe_ui_update(self._update_after_file_load, success, error_msg, file_path)
+            self.logger.debug(f"UI update scheduled from thread {thread_id}")
 
-        threading.Thread(target=load_thread).start()
+        load_thread_obj = self._create_tracked_thread(load_thread, name="FileLoader", daemon=True)
+        load_thread_obj.start()
 
     def _update_after_file_load(self, success, error_msg, file_path):
         """Update UI after file loading completes"""
+        thread_id = threading.get_ident()
+        self.logger.debug(f"File load UI update called from thread {thread_id}")
+
         if success:
+            self.logger.debug("File load successful, updating UI components")
             # Update treeview
             self.data_treeview.set_data(self.data_manager.get_data())
 
@@ -1109,10 +1244,13 @@ class ExcelAIAssistantApp:
 
             # Update window title
             self.root.title(f"Excel AI Assistant - {os.path.basename(file_path)}")
+            self.logger.debug("File load UI update completed successfully")
         else:
+            self.logger.error(f"File load failed: {error_msg}")
             self.log(f"Error opening file: {error_msg}", "ERROR")
             self.status_bar.set_status("Error loading file", "error")
             messagebox.showerror("Error", f"Failed to open file: {error_msg}")
+            self.logger.debug("File load error UI update completed")
 
     def _update_column_lists(self):
         """Update column lists in the UI"""
@@ -1298,19 +1436,24 @@ class ExcelAIAssistantApp:
 
     def _test_api_connection(self):
         """Test the API connection based on selected API type"""
+        self.logger.info("Starting API connection test")
         api_type = self.api_type_var.get().lower()  # Ensure lowercase
+        self.logger.debug(f"Testing connection for API type: {api_type}")
 
         model = self.model_var.get()
+        self.logger.debug(f"Using model: {model}")
 
         if api_type == 'openai':
             # Get API key
             api_key = self.api_key_entry.get()
 
             if not api_key:
+                self.logger.warning("OpenAI API key is empty")
                 messagebox.showerror("Error", "API Key is required for OpenAI")
                 return
 
             # Update API manager
+            self.logger.debug("Initializing OpenAI API manager")
             self.api_manager.set_api_type('openai')
             self.api_manager.initialize(api_key)
             self.api_manager.set_model(model)
@@ -1319,42 +1462,68 @@ class ExcelAIAssistantApp:
             gemini_api_key = self.gemini_api_key_entry.get()
 
             if not gemini_api_key:
+                self.logger.warning("Gemini API key is empty")
                 messagebox.showerror("Error", "Gemini API Key is required for Gemini")
                 return
 
             # Update API manager
+            self.logger.debug("Initializing Gemini API manager")
             self.api_manager.set_api_type('gemini')
             self.api_manager.initialize(gemini_api_key)
             self.api_manager.set_model(model)
         else:  # ollama
             # Update API manager
             url = self.ollama_url_var.get()
+            self.logger.debug(f"Using Ollama URL: {url}")
 
             self.api_manager.set_api_type('ollama')
             self.api_manager.set_ollama_url(url)
             self.api_manager.set_model(model)
 
         self.status_bar.set_status("Testing API connection...", "info")
+        self.logger.info("Starting API connection test in background thread")
 
         # Test in a separate thread to prevent UI freezing
         def test_thread():
-            success, message = self.api_manager.test_connection()
+            thread_id = threading.get_ident()
+            self.logger.debug(f"Starting API test thread {thread_id}")
+            try:
+                self.logger.debug("Calling api_manager.test_connection()")
+                success, message = self.api_manager.test_connection()
+                self.logger.debug(f"API test result: success={success}, message='{message}'")
 
-            # Update UI in the main thread
-            self.root.after(0, lambda: self._update_api_test_result(success, message))
+                # Update UI in the main thread
+                self.logger.debug(f"Scheduling API test result update from thread {thread_id}")
+                self._safe_ui_update(self._update_api_test_result, success, message)
+                self.logger.debug(f"API test UI update scheduled from thread {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Exception during API test in thread {thread_id}: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                self.logger.debug(f"Scheduling error UI update from thread {thread_id}")
+                self._safe_ui_update(self._update_api_test_result, False, f"Test failed: {str(e)}")
+                self.logger.debug(f"Error UI update scheduled from thread {thread_id}")
 
-        threading.Thread(target=test_thread, daemon=True).start()
+        test_thread_obj = self._create_tracked_thread(test_thread, name="APITest", daemon=True)
+        test_thread_obj.start()
 
     def _update_api_test_result(self, success: bool, message: str):
         """Update UI with API test result"""
+        thread_id = threading.get_ident()
+        self.logger.debug(f"API test result UI update called from thread {thread_id}")
+
         if success:
+            self.logger.debug("API test successful, showing success message")
             messagebox.showinfo("API Test", "Connection successful!")
             self.log("API connection test: Success")
             self.status_bar.set_status("API connection successful", "success")
         else:
+            self.logger.error(f"API test failed: {message}")
             messagebox.showerror("API Test Failed", f"Error: {message}")
             self.log(f"API connection test failed: {message}", "ERROR")
             self.status_bar.set_status("API connection failed", "error")
+
+        self.logger.debug("API test result UI update completed")
 
     def _preview_transformation(self):
         """Preview the transformation on a single cell"""
@@ -1382,20 +1551,34 @@ class ExcelAIAssistantApp:
 
             # Call API in a separate thread to prevent UI freezing
             def preview_thread():
-                success, result, error = self.api_manager.process_single_cell(
-                    sample_cell_content,
-                    system_prompt,
-                    user_prompt,
-                    float(self.temperature_var.get()),
-                    int(self.max_tokens_var.get())
-                )
+                thread_id = threading.get_ident()
+                self.logger.debug(f"Starting preview thread {thread_id} for cell [{start_row}, {sample_col}]")
+                try:
+                    success, result, error = self.api_manager.process_single_cell(
+                        sample_cell_content,
+                        system_prompt,
+                        user_prompt,
+                        float(self.temperature_var.get()),
+                        int(self.max_tokens_var.get())
+                    )
+                    self.logger.debug(f"Preview completed in thread {thread_id}, success: {success}")
 
-                # Update UI in the main thread
-                self.root.after(0, lambda: self._update_preview_result(
-                    success, result, error, start_row, sample_col, sample_cell_content
-                ))
+                    # Update UI in the main thread
+                    self.logger.debug(f"Scheduling preview result update from thread {thread_id}")
+                    self._safe_ui_update(self._update_preview_result,
+                        success, result, error, start_row, sample_col, sample_cell_content)
+                    self.logger.debug(f"Preview UI update scheduled from thread {thread_id}")
+                except Exception as e:
+                    self.logger.error(f"Exception in preview thread {thread_id}: {str(e)}")
+                    import traceback
+                    self.logger.error(f"Traceback: {traceback.format_exc()}")
+                    self.logger.debug(f"Scheduling error preview update from thread {thread_id}")
+                    self._safe_ui_update(self._update_preview_result,
+                        False, "", str(e), start_row, sample_col, sample_cell_content)
+                    self.logger.debug(f"Error preview UI update scheduled from thread {thread_id}")
 
-            threading.Thread(target=preview_thread).start()
+            preview_thread_obj = self._create_tracked_thread(preview_thread, name="Preview", daemon=True)
+            preview_thread_obj.start()
 
         except Exception as e:
             self.log(f"Error preparing preview: {str(e)}", "ERROR")
@@ -1742,6 +1925,14 @@ class ExcelAIAssistantApp:
         self.log(f"Starting batch processing of {total_cells} cells")
         self.status_bar.set_status("Processing cells...", "info")
 
+        # Log batch processing start
+        self.logger.info(f"Starting batch processing with {len(cells_to_process)} cells, batch size: {batch_size}")
+        import psutil
+        import os
+        process = psutil.Process(os.getpid())
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        self.logger.debug(f"Initial memory usage: {initial_memory:.2f} MB")
+
         # Process in batches using the batch processor
         self.batch_processor.process_batches(
             cells_to_process,
@@ -1753,6 +1944,10 @@ class ExcelAIAssistantApp:
             progress_callback=self._update_batch_progress,
             completion_callback=self._processing_completed
         )
+
+        # Log memory usage after starting batch processing
+        final_memory = process.memory_info().rss / 1024 / 1024  # MB
+        self.logger.debug(f"Memory usage after starting batch processing: {final_memory:.2f} MB (delta: {final_memory - initial_memory:.2f} MB)")
 
     def _cancel_processing(self):
         """Cancel batch processing with error handling"""
@@ -1784,15 +1979,24 @@ class ExcelAIAssistantApp:
 
     def _update_batch_progress(self, processed: int, success_count: int, error_count: int, total: int, status: str):
         """Update batch processing progress with error handling"""
+        # Use safe UI update to prevent threading issues
+        self._safe_ui_update(self._do_progress_update, processed, success_count, error_count, total, status)
+
+    def _do_progress_update(self, processed: int, success_count: int, error_count: int, total: int, status: str):
+        """Actual progress update implementation - runs in main thread"""
         try:
+            thread_id = threading.get_ident()
+            self.logger.debug(f"Progress update executing in thread {thread_id}: {processed}/{total}")
+
             # Check if progress window exists and is valid
             if not hasattr(self, 'progress_window') or not self.progress_window.winfo_exists():
                 # Only log progress to console
                 progress_percentage = (processed / total) * 100 if total > 0 else 0
                 if processed % 10 == 0 or processed == total:
                     self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
+                self.logger.debug(f"Progress window not available, skipping UI update from thread {thread_id}")
                 return
-            
+
             # Update progress bar
             progress_value = min(processed, total)
             progress_percentage = (progress_value / total) * 100 if total > 0 else 0
@@ -1801,35 +2005,49 @@ class ExcelAIAssistantApp:
             try:
                 if hasattr(self, 'progress_status') and self.progress_status.winfo_exists():
                     self.progress_status.config(text=status)
-            except Exception:
-                pass
+                    self.logger.debug(f"Updated progress status to: {status}")
+                else:
+                    self.logger.warning(f"Progress status widget not available in thread {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Error updating progress status in thread {thread_id}: {str(e)}")
 
             # Update counts - use try/except for each UI update
             try:
                 if hasattr(self, 'processed_count') and self.processed_count.winfo_exists():
                     self.processed_count.config(text=str(processed))
-            except Exception:
-                pass
-                
+                    self.logger.debug(f"Updated processed count to: {processed}")
+                else:
+                    self.logger.warning(f"Processed count widget not available in thread {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Error updating processed count in thread {thread_id}: {str(e)}")
+
             try:
                 if hasattr(self, 'success_count') and self.success_count.winfo_exists():
                     self.success_count.config(text=str(success_count))
-            except Exception:
-                pass
-                
+                    self.logger.debug(f"Updated success count to: {success_count}")
+                else:
+                    self.logger.warning(f"Success count widget not available in thread {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Error updating success count in thread {thread_id}: {str(e)}")
+
             try:
                 if hasattr(self, 'failed_count') and self.failed_count.winfo_exists():
                     self.failed_count.config(text=str(error_count))
-            except Exception:
-                pass
+                    self.logger.debug(f"Updated failed count to: {error_count}")
+                else:
+                    self.logger.warning(f"Failed count widget not available in thread {thread_id}")
+            except Exception as e:
+                self.logger.error(f"Error updating failed count in thread {thread_id}: {str(e)}")
 
             # Log progress
             if processed % 10 == 0 or processed == total:
                 self.log(f"Progress: {processed}/{total} cells processed ({progress_percentage:.1f}%)")
-                
+
         except Exception as e:
             # If any error occurs, just log it and continue
-            print(f"Error updating progress: {str(e)}")
+            self.logger.error(f"Critical error in progress update: {str(e)}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             # Still log progress to console
             if processed % 10 == 0 or processed == total:
                 progress_percentage = (processed / total) * 100 if total > 0 else 0
@@ -2521,3 +2739,119 @@ class ExcelAIAssistantApp:
     def _show_about(self):
         """Show about dialog"""
         AboutDialog(self.root)
+
+    def _open_from_google_drive(self):
+        """Open file from Google Drive"""
+        try:
+            # Check if client secrets are configured
+            client_secrets_path = self.config.get('google_client_secrets_path')
+            if not client_secrets_path or not os.path.exists(client_secrets_path):
+                result = messagebox.askyesno(
+                    "Google Drive Setup Required",
+                    "Google Drive is not configured yet. Would you like to open the settings to configure it?",
+                    icon=messagebox.QUESTION
+                )
+
+                if result:
+                    self._open_cloud_settings()
+                else:
+                    messagebox.showinfo(
+                        "Setup Required",
+                        "Please follow the setup guide in docs/google_drive_setup.md to configure Google Drive integration."
+                    )
+                return
+
+            # Check if Google Drive is authenticated
+            if not self.cloud_manager.google_drive.is_authenticated():
+                # Try to authenticate
+                if not self.cloud_manager.google_drive.authenticate():
+                    messagebox.showerror(
+                        "Authentication Failed",
+                        "Failed to authenticate with Google Drive.\n\n"
+                        "Please check:\n"
+                        "1. Your client secrets file is valid\n"
+                        "2. You have an internet connection\n"
+                        "3. You granted the necessary permissions in the browser\n\n"
+                        "See docs/google_drive_setup.md for troubleshooting."
+                    )
+                    return
+
+            # Open file browser dialog
+            from app.ui.dialogs.cloud_storage_dialog import CloudStorageDialog
+            dialog = CloudStorageDialog(self.root, "Google Drive", self.cloud_manager.google_drive)
+            file_info = dialog.get_selected_file()
+
+            if file_info:
+                self._load_cloud_file(file_info, "Google Drive")
+
+        except Exception as e:
+            self.log(f"Error opening from Google Drive: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Failed to open from Google Drive: {str(e)}")
+
+    def _open_from_onedrive(self):
+        """Open file from OneDrive"""
+        messagebox.showinfo("Coming Soon", "OneDrive integration is coming soon!")
+
+    def _open_from_dropbox(self):
+        """Open file from Dropbox"""
+        messagebox.showinfo("Coming Soon", "Dropbox integration is coming soon!")
+
+    def _open_cloud_settings(self):
+        """Open cloud storage settings dialog"""
+        from app.ui.dialogs.cloud_storage_settings_dialog import CloudStorageSettingsDialog
+        dialog = CloudStorageSettingsDialog(self.root, self.config)
+        result = dialog.get_result()
+
+        if result:
+            self.log("Cloud storage settings updated")
+            self.status_bar.set_status("Cloud storage settings saved")
+
+    def _load_cloud_file(self, file_info: Dict[str, Any], source: str):
+        """Load a file from cloud storage"""
+        try:
+            self.status_bar.set_status(f"Downloading from {source}...", "info")
+
+            # Download the file
+            file_content = self.cloud_manager.download_file(file_info, source)
+
+            if file_content:
+                # Save to temporary file and load
+                import tempfile
+                import os
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_info.get('name', '.xlsx')) as temp_file:
+                    temp_file.write(file_content)
+                    temp_file_path = temp_file.name
+
+                # Load the file
+                success, error_msg = self.data_manager.load_file(temp_file_path)
+
+                # Clean up temp file
+                try:
+                    os.unlink(temp_file_path)
+                except:
+                    pass
+
+                if success:
+                    # Update UI
+                    self.data_treeview.set_data(self.data_manager.get_data())
+                    self._update_column_lists()
+                    self.config.add_recent_file(file_info.get('name', 'Cloud File'))
+                    self._update_recent_files_menu()
+
+                    self.log(f"Opened file from {source}: {file_info.get('name', 'Unknown')}")
+                    self.status_bar.set_status(f"Loaded from {source}")
+                    self.root.title(f"Excel AI Assistant - {file_info.get('name', 'Cloud File')}")
+                else:
+                    self.log(f"Error loading cloud file: {error_msg}", "ERROR")
+                    self.status_bar.set_status("Error loading cloud file", "error")
+                    messagebox.showerror("Error", f"Failed to load file: {error_msg}")
+            else:
+                self.log("Failed to download file from cloud", "ERROR")
+                self.status_bar.set_status("Download failed", "error")
+                messagebox.showerror("Error", "Failed to download file from cloud storage")
+
+        except Exception as e:
+            self.log(f"Error loading cloud file: {str(e)}", "ERROR")
+            self.status_bar.set_status("Error loading cloud file", "error")
+            messagebox.showerror("Error", f"Failed to load cloud file: {str(e)}")

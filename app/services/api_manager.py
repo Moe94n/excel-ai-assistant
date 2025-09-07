@@ -39,6 +39,8 @@ class APIManager:
         self.gemini_api_key = api_key  # Will be used for Gemini
         self.gemini_manager = GeminiAPIManager(api_key=api_key)
 
+        self.logger.info(f"APIManager initialized with api_type={api_type}")
+
         # Rate limiting
         self.request_count = 0
         self.request_start_time = time.time()
@@ -91,9 +93,10 @@ class APIManager:
 
     def get_available_models(self) -> List[Dict[str, Any]]:
         """Get list of available models based on current API type"""
+        self.logger.info(f"Getting available models for API type: {self.api_type}")
         if self.api_type == APIType.OPENAI:
             # Return standard OpenAI models (static list)
-            return [
+            models = [
                 {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "api": "openai"},
                 {"id": "gpt-4", "name": "GPT-4", "api": "openai"},
                 {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "api": "openai"},
@@ -101,23 +104,47 @@ class APIManager:
                 {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "api": "openai"},
                 {"id": "gpt-3.5-turbo-16k", "name": "GPT-3.5 Turbo 16k", "api": "openai"}
             ]
+            self.logger.debug(f"Returning {len(models)} OpenAI models")
+            return models
         elif self.api_type == APIType.GEMINI:
             # Fetch models from Gemini
-            success, models, error = self.gemini_manager.list_available_models()
-            if success and models:
-                return models
-            else:
-                # Return default Gemini models if error
-                self.logger.error(f"Error getting Gemini models: {error}")
-                return [
+            self.logger.debug("Attempting to fetch Gemini models")
+            try:
+                success, models, error = self.gemini_manager.get_available_models()
+                if success and models:
+                    self.logger.info(f"Successfully retrieved {len(models)} Gemini models")
+                    return models
+                else:
+                    # Return default Gemini models if error
+                    self.logger.error(f"Error getting Gemini models: {error}")
+                    default_models = [
+                        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "api": "gemini"},
+                        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "api": "gemini"},
+                        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "api": "gemini"},
+                        {"id": "gemini-2.0-pro", "name": "Gemini 2.0 Pro", "api": "gemini"}
+                    ]
+                    self.logger.warning(f"Using default Gemini models: {[m['id'] for m in default_models]}")
+                    return default_models
+            except AttributeError as e:
+                self.logger.error(f"Method not found on Gemini manager: {e}")
+                self.logger.error("Expected method: get_available_models(), but it might be missing or named differently")
+                # Fallback to default models
+                default_models = [
                     {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "api": "gemini"},
-                    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "api": "gemini"}
+                    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "api": "gemini"},
+                    {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "api": "gemini"},
+                    {"id": "gemini-2.0-pro", "name": "Gemini 2.0 Pro", "api": "gemini"}
                 ]
+                self.logger.warning("Using fallback default Gemini models due to method error")
+                return default_models
         else:  # OLLAMA
             # Fetch models from Ollama
+            self.logger.debug("Attempting to fetch Ollama models")
             success, models, error = self.ollama_manager.list_available_models()
             if success and models:
-                return [{"id": model, "name": model, "api": "ollama"} for model in models]
+                ollama_models = [{"id": model, "name": model, "api": "ollama"} for model in models]
+                self.logger.info(f"Successfully retrieved {len(ollama_models)} Ollama models")
+                return ollama_models
             else:
                 # Return empty list if error
                 self.logger.error(f"Error getting Ollama models: {error}")

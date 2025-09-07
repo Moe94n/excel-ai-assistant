@@ -10,3 +10,8 @@ tkinter-tooltip>=2.0.0  # For tooltips in UI
 requests~=2.32.3
 
 google-generativeai>=0.5.0
+
+# Google Drive integration
+google-api-python-client>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
